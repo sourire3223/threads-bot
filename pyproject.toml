@@ -1,0 +1,95 @@
+[project]
+name = "threads-bot"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "playwright",
+    "opencv-python",
+    "numpy",
+    "pillow",
+    "requests",
+    "dotenv",
+]
+[dependency-groups]
+dev = ["pytest", "ipykernel", "ruff"]
+
+[tool.ruff]
+include = ["*.py", "*.pyi"]
+indent-width = 4
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.format]
+line-ending = "auto"
+quote-style = "double"
+
+[tool.ruff.lint]
+
+task-tags = ["TODO", "FIXME"]
+select = ["ALL"]
+ignore = [
+    #### modules
+    "ANN", # flake8-annotations
+    "COM", # flake8-commas
+    "C90", # mccabe complexity
+    "DJ",  # django
+    "EXE", # flake8-executable
+    "T10", # debugger
+    "TID", # flake8-tidy-imports
+
+    "BLE001",
+    "COM819",
+    "CPY",
+    "D100",   # ignore missing docs
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D106",
+    "D107",
+    "D200",
+    "D203",
+    "D213",
+    "D205",
+    "D212",
+    "D400",
+    "D401",
+    "D415",
+    "D413",
+    "D416",
+    "E111",
+    "E114",
+    "ERA001",
+    "FA",
+    "ISC001",
+    "N803",
+    "N806",
+    "PGH003",
+    "RUF013",
+    "SLF001",
+    "TD002",
+    "TD003",
+    "TRY201",
+    "TRY203",
+    "TRY300",
+    "TRY301",
+    "W191",
+    "W505",
+    "S101",
+]
+extend-safe-fixes = ["E402"]
+fixable = ["ALL"]
+unfixable = ["B007", "ERA", "F401", "F841"]
+extend-fixable = ["E402"]
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.isort]
+case-sensitive = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
