@@ -8,9 +8,10 @@ import requests
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
+load_dotenv()
 WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
-THREAD_URL = "https://www.threads.net/@paul_pork/"
-SELECTOR = "div.x1ypdohk.x1n2onr6.xvuun6i.x3qs2gp.x1w8tkb5.x8xoigl.xz9dl7a"
+THREAD_URL = "https://www.threads.com/@paul_pork/"
+SELECTOR = "div.x78zum5.xdt5ytf>div.x9f619.x1n2onr6.x1ja2u2z"
 SCREENSHOT_DIR = "screenshots"
 LAST_SCREENSHOT_PATH = os.path.join(SCREENSHOT_DIR, "latest.png")
 

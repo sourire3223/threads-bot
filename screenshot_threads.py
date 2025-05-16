@@ -1,8 +1,9 @@
 from playwright.sync_api import sync_playwright
 
+
 def capture_latest_thread_post(
     url="https://www.threads.com/@paul_pork/",
-    selector="div.x1ypdohk.x1n2onr6.xvuun6i.x3qs2gp.x1w8tkb5.x8xoigl.xz9dl7a",
+    selector="div.x78zum5.xdt5ytf>div.x9f619.x1n2onr6.x1ja2u2z",
     output_path="single_thread_post.png",
     debug_path="debug_full_page.png",
     storage_state="auth.json"
