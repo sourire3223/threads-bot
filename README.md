@@ -15,31 +15,22 @@
 ---
 
 ## 環境需求
-* `Python 3.8+`
-
+* `Python 3.12+`
 * `Playwright`
-
-* `Pillow (PIL)`
-
-* 其他依賴請見 `requirements.txt`
+* 其他依賴請見 `pyproject.toml`
 
 ---
 
 
 ## 安裝
-### 1. 從 GitHub 下載專案
-```console
-git clone git@github.com:water200427/threads_bot.git
-cd threads_bot
-```
-### 2. 安裝依賴
-```console
-pip install -r requirements.txt
+### 1. 安裝依賴
+```shell
+pip install -r requirements.txt # or uv sync
 python -m playwright install
 ```
 
-## 使用前準備
-```console
+## 使用前準備 (Optional)
+```shell
 python record_login.py
 ```
 首次需要使用 `playwright` 進入瀏覽器登入帳號，登入後在 `console` 按下 `Enter`，會自動儲存登入狀態檔 `auth.json`。
@@ -47,10 +38,28 @@ python record_login.py
 
 ## 使用
 ```console
-python main_loop.py
+python -m src.main_loop
 ```
+
 程式將每 10 分鐘抓取最新貼文截圖，並與前次圖片比對。
 若圖片不同則儲存，否則略過。
+
+## Docker
+### 1. 建立 Docker 映像檔
+```shell
+docker build -t threads-bot .
+```
+### 2. 執行 Docker 容器
+```shell
+docker run -d \
+  --name threads-bot \
+  --restart always \
+  -v $(pwd)/screenshots:/project/screenshots \
+  -v $(pwd)/auth.json:/project/auth.json \
+  -v $(pwd)/.env:/project/.env \
+  threads-bot
+```
+
 
 ## **結果位置**：
 所有截圖會存在 `screenshots/` 資料夾，圖片名稱包含截圖時間。
@@ -58,12 +67,8 @@ python main_loop.py
 ---
 
 ## 檔案說明
-* `screenshot_threads.py`：封裝擷取單則 Threads 貼文的函式。
-
 * `main_loop.py`：定時呼叫截圖函式，進行圖片比對與管理。
-
 * `auth.json`：Playwright 登入狀態檔（需自行產生）。
-
 * `screenshots/`：存放所有截圖和 hash 記錄。
 
 ---
@@ -71,16 +76,12 @@ python main_loop.py
 ## 注意事項
 
 * `Threads` 介面和 `class` 名可能變動，如失效請更新 `screenshot_threads.py` 中的 CSS 選擇器。
-
 * 無頭模式下無法手動操作，請確保登入狀態有效。
-
 * 需要穩定網路和持續運行 Python 腳本。
 
 ---
 
 ## 可擴充功能建議
 * 新增錯誤日誌記錄功能。
-
 * 串接通知機制（如 Discord、Telegram）提醒有新貼文截圖。
-
 * 自動清理過舊的截圖檔案。
