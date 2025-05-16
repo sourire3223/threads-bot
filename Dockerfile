@@ -16,8 +16,7 @@ FROM python:3.13.2-slim
 WORKDIR /project
 
 COPY --from=builder /usr/local/lib/python3.13/site-packages/ /usr/local/lib/python3.13/site-packages/
+RUN python -m playwright install
 
 COPY . .
-
-RUN python -m playwright install
 CMD ["python", "-m", "src.main_loop"]
