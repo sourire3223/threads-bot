@@ -21,7 +21,7 @@ INTERVAL_SECONDS = 180  # 每 10 分鐘截圖一次
 
 def send_image_to_discord(image_path: Path, webhook_url: str):
     with image_path.open("rb") as f:
-        files = {"attachment": (image_path, f, "image/jpeg")}
+        files = {"attachment": (image_path.as_posix(), f, "image/jpeg")}
         response = requests.post(webhook_url, files=files, timeout=10)
         if response.status_code == 200:
             logger.info("✅ 圖片已成功發送到 Discord")
