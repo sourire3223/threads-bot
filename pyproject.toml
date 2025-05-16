@@ -4,14 +4,7 @@ version = "0.1.0"
 description = ""
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
-    "playwright",
-    "opencv-python",
-    "numpy",
-    "pillow",
-    "requests",
-    "dotenv",
-]
+dependencies = ["playwright", "requests", "dotenv"]
 [dependency-groups]
 dev = ["pytest", "ipykernel", "ruff"]
 
