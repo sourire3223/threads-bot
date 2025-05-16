@@ -25,6 +25,7 @@ def capture_latest_post_screenshots(
             device_scale_factor=3,
             is_mobile=True,
             has_touch=True,
+            color_scheme="dark",
         )
         page = context.new_page()
         page.goto(url)
@@ -38,7 +39,12 @@ def capture_latest_post_screenshots(
                     el.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.remove();
                 });
             """)
-
+            # remove dialog
+            page.evaluate("""
+                document.querySelectorAll('nav').forEach(el => {
+                    el.remove();
+                });
+            """)
             screenshot_paths = []
             current_time = int(time.time())
 
