@@ -15,37 +15,49 @@
 ---
 
 ## 環境需求
-* Python 3.8+
+* `Python 3.8+`
 
-* Playwright
+* `Playwright`
 
-* Pillow (PIL)
+* `Pillow (PIL)`
 
 * 其他依賴請見 `requirements.txt`
 
 ---
 
+
 ## 安裝
+### 1. 從 GitHub 下載專案
+```console
+git clone git@github.com:water200427/threads_bot.git
+cd threads_bot
+```
+### 2. 安裝依賴
 ```console
 pip install -r requirements.txt
 python -m playwright install
 ```
 
-## 使用說明
-1. **登入 Threads**：
-首次需要使用 `python record_login.py` 進入瀏覽器登入帳號，登入後在 `console` 按下 `Enter`，會自動儲存登入狀態檔 `auth.json`。
+## 使用前準備
+```console
+python record_login.py
+```
+首次需要使用 `playwright` 進入瀏覽器登入帳號，登入後在 `console` 按下 `Enter`，會自動儲存登入狀態檔 `auth.json`。
 
 
-1. **定期截圖**：
-執行 main_loop.py，程式將每 10 分鐘抓取最新貼文截圖，並與前次圖片比對。
+## 使用
+```console
+python main_loop.py
+```
+程式將每 10 分鐘抓取最新貼文截圖，並與前次圖片比對。
 若圖片不同則儲存，否則略過。
 
-1. **結果位置**：
-所有截圖會存在 screenshots/ 資料夾，圖片名稱包含截圖時間。
+## **結果位置**：
+所有截圖會存在 `screenshots/` 資料夾，圖片名稱包含截圖時間。
 
 ---
 
-檔案說明
+## 檔案說明
 * `screenshot_threads.py`：封裝擷取單則 Threads 貼文的函式。
 
 * `main_loop.py`：定時呼叫截圖函式，進行圖片比對與管理。
@@ -58,7 +70,7 @@ python -m playwright install
 
 ## 注意事項
 
-* Threads 介面和 class 名可能變動，如失效請更新 screenshot_threads.py 中的 CSS 選擇器。
+* `Threads` 介面和 `class` 名可能變動，如失效請更新 `screenshot_threads.py` 中的 CSS 選擇器。
 
 * 無頭模式下無法手動操作，請確保登入狀態有效。
 
