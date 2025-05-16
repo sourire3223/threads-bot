@@ -1,3 +1,4 @@
+from loguru import logger
 from playwright.sync_api import sync_playwright
 
 with sync_playwright() as p:
@@ -11,5 +12,5 @@ with sync_playwright() as p:
 
     # 儲存登入狀態
     context.storage_state(path="auth.json")
-    print("✅ 登入狀態已儲存至 auth.json")
+    logger.info("✅ 登入狀態已儲存至 auth.json")
     browser.close()

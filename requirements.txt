@@ -10,6 +10,8 @@ greenlet==3.2.2
     # via playwright
 idna==3.10
     # via requests
+loguru==0.7.3
+    # via threads-bot (pyproject.toml)
 playwright==1.52.0
     # via threads-bot (pyproject.toml)
 pyee==13.0.0

@@ -2,6 +2,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from loguru import logger
 from playwright.sync_api import sync_playwright
 
 SELECTOR = "div.x78zum5.xdt5ytf>div.x9f619.x1n2onr6.x1ja2u2z"
@@ -55,21 +56,20 @@ def capture_latest_post_screenshots(
                 """)
 
                 time_s = post_time_to_int(max(datetimes))
-                print(time_s, current_time - time_lookback)
                 if time_s < current_time - time_lookback:
-                    print(f"❌ 時間不符合: {time_s} > {current_time - time_lookback}")
+                    logger.info(f"❌ 時間不符合: {time_s} > {current_time - time_lookback}")
                     continue
 
                 path = folder / f"{time_s}.png"
                 if path.exists():
-                    print(f"❌ 檔案已存在: {path}")
+                    logger.info(f"❌ 檔案已存在: {path}")
                     continue
 
                 post.screenshot(path=path)
                 screenshot_paths.append(path)
-                print(f"✅ 擷取成功: {path}")
+                logger.info(f"✅ 擷取成功: {path}")
         except Exception as e:
-            print("❌ 擷取失敗:", e)
+            logger.info("❌ 擷取失敗:", e)
         finally:
             browser.close()
 

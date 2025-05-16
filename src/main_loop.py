@@ -4,6 +4,7 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
+from loguru import logger
 
 from src.screenshot import capture_latest_post_screenshots
 
@@ -23,9 +24,9 @@ def send_image_to_discord(image_path: Path, webhook_url: str):
         files = {"attachment": (image_path, f, "image/jpeg")}
         response = requests.post(webhook_url, files=files, timeout=10)
         if response.status_code == 200:
-            print("✅ 圖片已成功發送到 Discord")
+            logger.info("✅ 圖片已成功發送到 Discord")
         else:
-            print(f"❌ 發送失敗: {response.status_code}")
+            logger.info(f"❌ 發送失敗: {response.status_code}")
         return response
 
 
