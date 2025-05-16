@@ -15,7 +15,7 @@
 ---
 
 ## 環境需求
-* `Python 3.12+`
+* `Python 3.10+`
 * `Playwright`
 * 其他依賴請見 `pyproject.toml`
 

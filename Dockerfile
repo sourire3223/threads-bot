@@ -1,4 +1,4 @@
-FROM python:3.13.2 AS builder
+FROM python:3.10.12 AS builder
 
 ENV UV_PROJECT_ENVIRONMENT=/usr/local/
 WORKDIR /project
@@ -12,10 +12,10 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --no-dev
 # ==============================================================================
 # main stage
 # ==============================================================================
-FROM python:3.13.2-slim
+FROM mcr.microsoft.com/playwright/python
 WORKDIR /project
 
-COPY --from=builder /usr/local/lib/python3.13/site-packages/ /usr/local/lib/python3.13/site-packages/
+COPY --from=builder /usr/local/lib/python3.10/site-packages/ /usr/local/lib/python3.10/site-packages/
 RUN python -m playwright install
 
 COPY . .
