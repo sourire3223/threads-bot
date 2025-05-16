@@ -1,50 +1,86 @@
+import os
 import time
-import hashlib
-from pathlib import Path
 from datetime import datetime
+
+import cv2
+import numpy as np
 from PIL import Image
-from screenshot_threads import capture_latest_thread_post
+from playwright.sync_api import sync_playwright
+from skimage.metrics import structural_similarity as ssim
 
-OUTPUT_DIR = Path("screenshots")
-TEMP_IMAGE = OUTPUT_DIR / "temp_latest.png"
-PREV_HASH_PATH = OUTPUT_DIR / "prev_hash.txt"
+THREAD_URL = "https://www.threads.net/@paul_pork/"
+SELECTOR = "div.x1ypdohk.x1n2onr6.xvuun6i.x3qs2gp.x1w8tkb5.x8xoigl.xz9dl7a"
+SCREENSHOT_DIR = "screenshots"
+LAST_SCREENSHOT_PATH = os.path.join(SCREENSHOT_DIR, "latest.png")
 
-def image_hash(image_path):
-    with Image.open(image_path) as img:
-        return hashlib.md5(img.tobytes()).hexdigest()
+INTERVAL_SECONDS = 600  # 每 10 分鐘截圖一次
 
-def load_prev_hash():
-    if PREV_HASH_PATH.exists():
-        return PREV_HASH_PATH.read_text().strip()
-    return ""
+os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
-def save_prev_hash(hash_str):
-    PREV_HASH_PATH.write_text(hash_str)
 
-def main_loop(interval_minutes=10):
-    OUTPUT_DIR.mkdir(exist_ok=True)
+def images_are_similar(img_path1, img_path2, threshold=0.97):
+    img1 = cv2.cvtColor(np.array(Image.open(img_path1)), cv2.COLOR_RGB2GRAY)
+    img2 = cv2.cvtColor(np.array(Image.open(img_path2)), cv2.COLOR_RGB2GRAY)
 
+    if img1.shape != img2.shape:
+        img2 = cv2.resize(img2, (img1.shape[1], img1.shape[0]))
+
+    score, _ = ssim(img1, img2, full=True)
+    print(f"🧪 SSIM 相似度：{score:.4f}")
+    return score > threshold
+
+
+def capture_latest_post(output_path="temp.png"):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            storage_state="auth.json",
+            user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1",
+            viewport={"width": 390, "height": 844},
+            device_scale_factor=3,
+            is_mobile=True,
+            has_touch=True,
+        )
+        page = context.new_page()
+        page.goto(THREAD_URL)
+        page.wait_for_timeout(3000)
+
+        try:
+            page.wait_for_selector(SELECTOR, timeout=5000)
+            first_post = page.locator(SELECTOR).first
+            first_post.screenshot(path=output_path)
+            print(f"📸 已截圖: {output_path}")
+        except Exception as e:
+            print("❌ 擷取失敗，儲存整頁截圖供除錯")
+            page.screenshot(path="debug_full_page.png", full_page=True)
+            print(e)
+
+        browser.close()
+
+
+def main_loop():
     while True:
-        print("🔄 嘗試擷取最新 Threads 貼文截圖...")
-        success = capture_latest_thread_post(output_path=str(TEMP_IMAGE))
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        temp_path = os.path.join(SCREENSHOT_DIR, "temp.png")
+        capture_latest_post(temp_path)
 
-        if success and TEMP_IMAGE.exists():
-            new_hash = image_hash(TEMP_IMAGE)
-            prev_hash = load_prev_hash()
-
-            if new_hash == prev_hash:
-                print("⚠️ 這次的截圖與上次相同，已略過儲存。")
+        if os.path.exists(LAST_SCREENSHOT_PATH):
+            if images_are_similar(temp_path, LAST_SCREENSHOT_PATH):
+                print("🟡 與上一張圖相似，捨棄")
+                os.remove(temp_path)
             else:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = OUTPUT_DIR / f"thread_{timestamp}.png"
-                TEMP_IMAGE.rename(filename)
-                print(f"✅ 新截圖儲存為 {filename}")
-                save_prev_hash(new_hash)
+                new_path = os.path.join(
+                    SCREENSHOT_DIR, f"post_{timestamp}.png")
+                os.replace(temp_path, new_path)
+                os.replace(new_path, LAST_SCREENSHOT_PATH)
+                print(f"✅ 儲存新截圖: {new_path}")
         else:
-            print("❌ 無法擷取貼文，請檢查登入狀態或選擇器。")
+            os.rename(temp_path, LAST_SCREENSHOT_PATH)
+            print("✅ 儲存第一張截圖")
 
-        print(f"⏳ 等待 {interval_minutes} 分鐘...\n")
-        time.sleep(interval_minutes * 60)
+        print(f"⏳ 等待 {INTERVAL_SECONDS // 60} 分鐘...")
+        time.sleep(INTERVAL_SECONDS)
+
 
 if __name__ == "__main__":
-    main_loop(interval_minutes=10)
+    main_loop()
