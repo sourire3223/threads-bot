@@ -11,6 +11,7 @@ packaging==25.0
 pillow==11.2.1
 playwright==1.52.0
 pyee==13.0.0
+python-dotenv==1.1.0
 requests==2.32.3
 scikit-image==0.25.2
 scipy==1.15.3
