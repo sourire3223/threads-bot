@@ -1,9 +1,13 @@
+from pathlib import Path
+
 from loguru import logger
 from playwright.sync_api import sync_playwright
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=False)  # 開啟有頭模式讓你看到畫面
-    context = browser.new_context()
+
+    auth_file = Path("auth.json")
+    context = browser.new_context(storage_state=str(auth_file) if auth_file.exists() else None)
     page = context.new_page()
 
     page.goto("https://www.threads.com/")

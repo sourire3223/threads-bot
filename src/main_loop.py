@@ -6,7 +6,8 @@ import requests
 from dotenv import load_dotenv
 from loguru import logger
 
-from src.screenshot import capture_latest_post_screenshots
+from src.screenshot_ig import capture_latest_stories
+from src.screenshot_threads import capture_latest_post_screenshots
 
 load_dotenv()
 WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
@@ -14,6 +15,7 @@ THREAD_URLS = [
     "https://www.threads.com/@paul_pork/",
     "https://www.threads.com/@paul_pork/replies",
 ]
+IG_USER = "paul_pork"
 SCREENSHOT_DIR = Path("screenshots")
 
 INTERVAL_SECONDS = 180  # 每 10 分鐘截圖一次
@@ -38,8 +40,9 @@ def main_loop():
         new_reply_paths = capture_latest_post_screenshots(
             SCREENSHOT_DIR, THREAD_URLS[1], n_lookback=5, time_lookback=INTERVAL_SECONDS
         )
+        new_story_paths = capture_latest_stories(SCREENSHOT_DIR, IG_USER)
 
-        for post_path in sorted(new_reply_paths + new_post_paths):
+        for post_path in sorted(new_reply_paths + new_post_paths + new_story_paths):
             print("✨ 偵測到新貼文，準備發送")
             send_image_to_discord(post_path, WEBHOOK_URL)
 
