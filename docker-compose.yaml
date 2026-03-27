@@ -1,0 +1,12 @@
+services:
+  threads-bot:
+    container_name: threads-bot
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    volumes:
+      - ./.env:/project/.env:ro
+      - ./screenshots:/project/screenshots
+      - ./stories:/project/stories
+      - ./auth.json:/project/auth.json
