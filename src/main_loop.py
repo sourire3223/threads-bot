@@ -40,7 +40,7 @@ def main_loop():
         new_reply_paths = capture_latest_post_screenshots(
             SCREENSHOT_DIR, THREAD_URLS[1], n_lookback=5, time_lookback=INTERVAL_SECONDS
         )
-        new_story_paths = capture_latest_stories(SCREENSHOT_DIR, IG_USER)
+        new_story_paths = capture_latest_stories(SCREENSHOT_DIR, IG_USER, auth_file=Path("auth.json"))
 
         for post_path in sorted(new_reply_paths + new_post_paths + new_story_paths):
             print("✨ 偵測到新貼文，準備發送")
