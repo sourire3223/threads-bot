@@ -5,7 +5,7 @@ from pathlib import Path
 from loguru import logger
 from playwright.sync_api import sync_playwright
 
-SELECTOR = "div.x78zum5.xdt5ytf>div.x9f619.x1n2onr6.x1ja2u2z"
+SELECTOR = 'div[data-pagelet^="threads_profile_posts_timeline_"]'
 
 
 def post_time_to_int(s: str) -> int:

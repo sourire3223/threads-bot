@@ -18,7 +18,7 @@ THREAD_URLS = [
 IG_USER = "paul_pork"
 SCREENSHOT_DIR = Path("screenshots")
 
-INTERVAL_SECONDS = 60  # 每 10 分鐘截圖一次
+INTERVAL_SECONDS = 10 * 60  # 每 10 分鐘截圖一次
 
 
 def send_image_to_discord(image_path: Path, webhook_url: str):
@@ -35,10 +35,10 @@ def send_image_to_discord(image_path: Path, webhook_url: str):
 def main_loop():
     while True:
         new_post_paths = capture_latest_post_screenshots(
-            SCREENSHOT_DIR, THREAD_URLS[0], n_lookback=3, time_lookback=10 * INTERVAL_SECONDS
+            SCREENSHOT_DIR, THREAD_URLS[0], n_lookback=6, time_lookback=10 * INTERVAL_SECONDS
         )
         new_reply_paths = capture_latest_post_screenshots(
-            SCREENSHOT_DIR, THREAD_URLS[1], n_lookback=3, time_lookback=10 * INTERVAL_SECONDS
+            SCREENSHOT_DIR, THREAD_URLS[1], n_lookback=6, time_lookback=10 * INTERVAL_SECONDS
         )
         new_story_paths = capture_latest_stories(SCREENSHOT_DIR, IG_USER, auth_file=Path("auth.json"))
 
