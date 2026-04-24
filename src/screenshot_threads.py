@@ -30,7 +30,7 @@ def capture_latest_post_screenshots(
         page = context.new_page()
         page.goto(url)
         page.wait_for_timeout(3000)
-
+        screenshot_paths = []
         try:
             page.wait_for_selector(SELECTOR, timeout=3000)
             # remove dialog
@@ -45,7 +45,7 @@ def capture_latest_post_screenshots(
                     el.remove();
                 });
             """)
-            screenshot_paths = []
+
             current_time = int(time.time())
 
             for i in range(n_lookback):
