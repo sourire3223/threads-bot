@@ -51,11 +51,13 @@ def capture_latest_post_screenshots(
             for i in range(n_lookback):
                 post = page.locator(SELECTOR).nth(i)
                 # remove "Threads terms of use" alert
-                page.evaluate("""
-                    document.querySelectorAll('div[role="alert"]').forEach(el => {
-                        el.parentElement?.parentElement?.parentElement?.parentElement?.remove();
-                    });
-                """)
+                for _ in range(3):
+                    page.evaluate("""
+                        document.querySelectorAll('div[role="alert"]').forEach(el => {
+                            el.parentElement?.parentElement?.parentElement?.parentElement?.remove();
+                        });
+                    """)
+                    time.sleep(1)
                 datetimes = post.evaluate("""
                     (post) => Array.from(post.querySelectorAll('time'))
                         .map(el => el.getAttribute('datetime'))

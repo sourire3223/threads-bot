@@ -5,6 +5,9 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: always
+    environment:
+      - TZ=Asia/Taipei
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./.env:/project/.env:ro
       - ./screenshots:/project/screenshots
