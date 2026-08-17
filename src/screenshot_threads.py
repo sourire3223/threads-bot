@@ -48,8 +48,15 @@ def capture_latest_post_screenshots(
 
             current_time = int(time.time())
 
-            for i in range(n_lookback):
-                post = page.locator(SELECTOR).nth(i)
+            # 頁面上的貼文可能少於 n_lookback，不先數就會卡在不存在的 nth(i) 直到 timeout
+            posts = page.locator(SELECTOR)
+            n_posts = posts.count()
+            if n_posts < n_lookback:
+                logger.info(f"ℹ️ 頁面只有 {n_posts} 則貼文，少於 n_lookback={n_lookback}")
+            logger.info(f"🔍 檢查 {url} 的 {min(n_lookback, n_posts)} 則貼文")
+
+            for i in range(min(n_lookback, n_posts)):
+                post = posts.nth(i)
                 # remove "Threads terms of use" alert
                 for _ in range(3):
                     page.evaluate("""
@@ -65,19 +72,19 @@ def capture_latest_post_screenshots(
 
                 time_s = post_time_to_int(max(datetimes))
                 if time_s < current_time - time_lookback:
-                    logger.info(f"❌ 時間不符合: {time_s} > {current_time - time_lookback}")
+                    logger.debug(f"⏭️ 貼文太舊，跳過: {time_s} < {current_time - time_lookback}")
                     continue
 
                 path = folder / f"{time_s}.png"
                 if path.exists():
-                    logger.info(f"❌ 檔案已存在: {path}")
+                    logger.debug(f"⏭️ 檔案已存在，跳過: {path.name}")
                     continue
 
                 post.screenshot(path=path)
                 screenshot_paths.append(path)
-                logger.info(f"✅ 擷取成功: {path}")
+                logger.success(f"✅ 貼文擷取成功: {path.name}")
         except Exception:
-            logger.exception("❌ 擷取失敗")
+            logger.exception("❌ 貼文擷取失敗")
         finally:
             browser.close()
 
@@ -85,6 +92,10 @@ def capture_latest_post_screenshots(
 
 
 if __name__ == "__main__":
+    from src.logging_config import setup_logging
+
+    setup_logging()
+
     # 確保目錄存在
     screenshot_dir = Path("screenshots")
     screenshot_dir.mkdir(parents=True, exist_ok=True)

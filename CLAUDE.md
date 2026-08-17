@@ -11,7 +11,9 @@ uv run python -m playwright install      # install browser binaries (required on
 uv run python -m src.main_loop           # run the bot (must be from repo root — src/ has no __init__.py)
 uv run python -m src.screenshot_threads  # capture Threads posts only (module has its own __main__)
 uv run python -m src.screenshot_ig       # capture IG stories only (writes to stories/)
-uv run python src/record_login.py        # headed browser to log in and (re)generate auth.json
+uv run python -m src.record_login        # headed browser to log in and (re)generate auth.json
+
+LOG_LEVEL=DEBUG uv run python -m src.main_loop   # show skipped posts / per-story navigation
 
 uv run ruff check --fix .
 uv run ruff format .

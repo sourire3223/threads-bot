@@ -7,6 +7,7 @@ import requests
 from dotenv import load_dotenv
 from loguru import logger
 
+from src.logging_config import setup_logging
 from src.screenshot_ig import capture_latest_stories
 from src.screenshot_threads import capture_latest_post_screenshots
 
@@ -27,9 +28,9 @@ def send_image_to_discord(image_path: Path, webhook_url: str):
         files = {"attachment": (image_path.as_posix(), f, "image/jpeg")}
         response = requests.post(webhook_url, files=files, timeout=10)
         if response.status_code == HTTPStatus.OK:
-            logger.info("✅ 圖片已成功發送到 Discord")
+            logger.success(f"✅ 已發送到 Discord: {image_path.name}")
         else:
-            logger.info(f"❌ 發送失敗: {response.status_code}")
+            logger.error(f"❌ 發送失敗（HTTP {response.status_code}）: {image_path.name}")
         return response
 
 
@@ -43,13 +44,19 @@ def main_loop():
         )
         new_story_paths = capture_latest_stories(SCREENSHOT_DIR, IG_USER, auth_file=Path("auth.json"))
 
-        for post_path in sorted(new_reply_paths + new_post_paths + new_story_paths):
-            logger.info("✨ 偵測到新貼文，準備發送")
+        new_paths = sorted(new_reply_paths + new_post_paths + new_story_paths)
+        if new_paths:
+            logger.info(f"✨ 偵測到 {len(new_paths)} 則新內容，準備發送")
+        else:
+            logger.info("ℹ️ 沒有新內容")
+
+        for post_path in new_paths:
             send_image_to_discord(post_path, WEBHOOK_URL)
 
-        logger.info(f"⏳ 等待 {INTERVAL_SECONDS // 60} 分鐘...")
+        logger.info(f"⏳ 等待 {INTERVAL_SECONDS // 60} 分鐘")
         time.sleep(INTERVAL_SECONDS)
 
 
 if __name__ == "__main__":
+    setup_logging()
     main_loop()

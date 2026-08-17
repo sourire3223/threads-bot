@@ -26,12 +26,12 @@ class IGStoryCrawler:
             view_btn.or_(time_loc).first.wait_for(state="visible", timeout=10000)
 
             if view_btn.is_visible():
-                logger.info("點擊「查看限時動態」按鈕...")
+                logger.debug("👆 點擊「查看限時動態」按鈕")
                 view_btn.click(force=True)
             else:
-                logger.info("已經進入限時動態播放畫面。")
+                logger.debug("▶️ 已經進入限時動態播放畫面")
         except Exception:
-            logger.info("未發現起始狀態，嘗試直接執行。")
+            logger.debug("❔ 未發現起始狀態，嘗試直接執行")
 
     def pause_story(self):
         """執行暫停 (使用 JS 點擊)"""
@@ -88,9 +88,9 @@ class IGStoryCrawler:
 
                 img_locator = self.get_image_locator()
                 if not img_locator.is_visible():
-                    logger.info("⚠️ 畫面不是圖片（可能是影片或無法播放），直接跳過。")
+                    logger.debug("⏭️ 畫面不是圖片（可能是影片或無法播放），跳過")
                     if not self.next_story():
-                        logger.info("已達最後一則，結束。")
+                        logger.debug("🏁 已達最後一則")
                         break
                     time.sleep(0.5)  # 給予換頁緩衝
                     continue  # 進入下一輪迴圈
@@ -113,7 +113,7 @@ class IGStoryCrawler:
                     if not path.exists():
                         img_data = requests.get(img_url, timeout=30).content
                         path.write_bytes(img_data)
-                        logger.info(f"✅ 下載成功: {path}")
+                        logger.success(f"✅ 限動下載成功: {path.name}")
                         story_paths.append(path)
 
                     downloaded_times.add(time_s)
@@ -121,11 +121,11 @@ class IGStoryCrawler:
 
                 # 5. 點擊下一則
                 if not self.next_story():
-                    logger.info("已達最後一則，抓取結束。")
+                    logger.debug("🏁 已達最後一則")
                     break
 
             except Exception:
-                logger.exception("❌ 流程中斷")
+                logger.exception("❌ 限動擷取流程中斷")
                 break
 
         return story_paths
@@ -148,6 +148,20 @@ def capture_latest_stories(folder: Path, username: str, auth_file: Path) -> list
         page = context.new_page()
         page.goto(url)
 
+        # 沒有限動或登入失效時，IG 會把 /stories/<user>/ 導向個人頁或登入頁。
+        # IG 是 SPA，導向發生在 goto 回傳之後，所以要等 URL 變化再判斷；
+        # 等到 timeout 代表沒被導走，也就是有限動可看。
+        with contextlib.suppress(Exception):
+            page.wait_for_url(lambda u: "/stories/" not in u, timeout=5000)
+
+        if "/stories/" not in page.url:
+            if "/accounts/login" in page.url:
+                logger.warning(f"⚠️ auth.json 可能已失效（被導向 {page.url}），請重跑 record_login.py")
+            else:
+                logger.info(f"ℹ️ 目前沒有可看的限時動態（被導向 {page.url}）")
+            browser.close()
+            return []
+
         crawler = IGStoryCrawler(page)
         story_paths = crawler.capture(folder)
 
@@ -156,6 +170,10 @@ def capture_latest_stories(folder: Path, username: str, auth_file: Path) -> list
 
 
 if __name__ == "__main__":
+    from src.logging_config import setup_logging
+
+    setup_logging()
+
     story_dir = Path("stories")
     story_dir.mkdir(parents=True, exist_ok=True)
     # 執行抓取

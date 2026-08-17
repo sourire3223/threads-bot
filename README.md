@@ -31,7 +31,7 @@ python -m playwright install
 
 ## 使用前準備 (Optional)
 ```shell
-python record_login.py
+python -m src.record_login
 ```
 首次需要使用 `playwright` 進入瀏覽器登入帳號，登入後在 `console` 按下 `Enter`，會自動儲存登入狀態檔 `auth.json`。
 

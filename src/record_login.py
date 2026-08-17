@@ -3,6 +3,10 @@ from pathlib import Path
 from loguru import logger
 from playwright.sync_api import sync_playwright
 
+from src.logging_config import setup_logging
+
+setup_logging()
+
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=False)  # 開啟有頭模式讓你看到畫面
 
@@ -16,5 +20,5 @@ with sync_playwright() as p:
 
     # 儲存登入狀態
     context.storage_state(path="auth.json")
-    logger.info("✅ 登入狀態已儲存至 auth.json")
+    logger.success("✅ 登入狀態已儲存至 auth.json")
     browser.close()
