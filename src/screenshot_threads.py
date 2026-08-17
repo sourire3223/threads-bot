@@ -7,6 +7,24 @@ from playwright.sync_api import sync_playwright
 
 SELECTOR = 'div[data-pagelet^="threads_profile_posts_timeline_"]'
 
+# 「Get the full app experience」安裝 App 彈窗。連同背景遮罩一起移除，所以要往上五層。
+REMOVE_DIALOG_JS = """
+    document.querySelectorAll('div[role="dialog"]').forEach(el => {
+        el.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.remove();
+    });
+"""
+# 「Threads terms of use」橫幅
+REMOVE_ALERT_JS = """
+    document.querySelectorAll('div[role="alert"]').forEach(el => {
+        el.parentElement?.parentElement?.parentElement?.parentElement?.remove();
+    });
+"""
+REMOVE_NAV_JS = """
+    document.querySelectorAll('nav').forEach(el => {
+        el.remove();
+    });
+"""
+
 
 def post_time_to_int(s: str) -> int:
     return int(datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%f%z").timestamp())
@@ -26,6 +44,7 @@ def capture_latest_post_screenshots(
             is_mobile=True,
             has_touch=True,
             color_scheme="dark",
+            locale="zh-TW",  # 不設的話會跟著機器語系跑，截圖的 UI 語言會不一致
         )
         page = context.new_page()
         page.goto(url)
@@ -33,18 +52,8 @@ def capture_latest_post_screenshots(
         screenshot_paths = []
         try:
             page.wait_for_selector(SELECTOR, timeout=3000)
-            # remove dialog
-            page.evaluate("""
-                document.querySelectorAll('div[role="dialog"]').forEach(el => {
-                    el.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.remove();
-                });
-            """)
-            # remove dialog
-            page.evaluate("""
-                document.querySelectorAll('nav').forEach(el => {
-                    el.remove();
-                });
-            """)
+            page.evaluate(REMOVE_DIALOG_JS)
+            page.evaluate(REMOVE_NAV_JS)
 
             current_time = int(time.time())
 
@@ -57,13 +66,8 @@ def capture_latest_post_screenshots(
 
             for i in range(min(n_lookback, n_posts)):
                 post = posts.nth(i)
-                # remove "Threads terms of use" alert
                 for _ in range(3):
-                    page.evaluate("""
-                        document.querySelectorAll('div[role="alert"]').forEach(el => {
-                            el.parentElement?.parentElement?.parentElement?.parentElement?.remove();
-                        });
-                    """)
+                    page.evaluate(REMOVE_ALERT_JS)
                     time.sleep(1)
                 datetimes = post.evaluate("""
                     (post) => Array.from(post.querySelectorAll('time'))
@@ -79,6 +83,10 @@ def capture_latest_post_screenshots(
                 if path.exists():
                     logger.debug(f"⏭️ 檔案已存在，跳過: {path.name}")
                     continue
+
+                # 安裝 App 彈窗可能在載入後才出現，或被截圖的捲動重新觸發，
+                # 所以每次拍照前都要再清一次，不能只靠載入時那一次。
+                page.evaluate(REMOVE_DIALOG_JS)
 
                 post.screenshot(path=path)
                 screenshot_paths.append(path)
