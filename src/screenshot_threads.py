@@ -76,8 +76,8 @@ def capture_latest_post_screenshots(
                 post.screenshot(path=path)
                 screenshot_paths.append(path)
                 logger.info(f"✅ 擷取成功: {path}")
-        except Exception as e:
-            logger.info("❌ 擷取失敗:", e)
+        except Exception:
+            logger.exception("❌ 擷取失敗")
         finally:
             browser.close()
 

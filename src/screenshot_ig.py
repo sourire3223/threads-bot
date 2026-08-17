@@ -121,8 +121,8 @@ class IGStoryCrawler:
                     logger.info("已達最後一則，抓取結束。")
                     break
 
-            except Exception as e:
-                logger.error(f"❌ 流程中斷: {e}")
+            except Exception:
+                logger.exception("❌ 流程中斷")
                 break
 
         return story_paths
