@@ -12,7 +12,7 @@ dev = ["pytest", "ipykernel", "ruff"]
 include = ["*.py", "*.pyi"]
 indent-width = 4
 line-length = 120
-target-version = "py313"
+target-version = "py310"
 
 [tool.ruff.format]
 line-ending = "auto"
@@ -61,6 +61,9 @@ ignore = [
     "N803",
     "N806",
     "PGH003",
+    "RUF001", # 全形標點在中文字串/註解裡是正常的，不是「易混淆字元」
+    "RUF002",
+    "RUF003",
     "RUF013",
     "SLF001",
     "TD002",

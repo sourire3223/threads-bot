@@ -1,5 +1,6 @@
 import os
 import time
+from http import HTTPStatus
 from pathlib import Path
 
 import requests
@@ -25,7 +26,7 @@ def send_image_to_discord(image_path: Path, webhook_url: str):
     with image_path.open("rb") as f:
         files = {"attachment": (image_path.as_posix(), f, "image/jpeg")}
         response = requests.post(webhook_url, files=files, timeout=10)
-        if response.status_code == 200:
+        if response.status_code == HTTPStatus.OK:
             logger.info("✅ 圖片已成功發送到 Discord")
         else:
             logger.info(f"❌ 發送失敗: {response.status_code}")
@@ -43,10 +44,10 @@ def main_loop():
         new_story_paths = capture_latest_stories(SCREENSHOT_DIR, IG_USER, auth_file=Path("auth.json"))
 
         for post_path in sorted(new_reply_paths + new_post_paths + new_story_paths):
-            print("✨ 偵測到新貼文，準備發送")
+            logger.info("✨ 偵測到新貼文，準備發送")
             send_image_to_discord(post_path, WEBHOOK_URL)
 
-        print(f"⏳ 等待 {INTERVAL_SECONDS // 60} 分鐘...")
+        logger.info(f"⏳ 等待 {INTERVAL_SECONDS // 60} 分鐘...")
         time.sleep(INTERVAL_SECONDS)
 
 

@@ -1,3 +1,4 @@
+import contextlib
 import time
 from datetime import datetime
 from pathlib import Path
@@ -35,14 +36,18 @@ class IGStoryCrawler:
     def pause_story(self):
         """執行暫停 (使用 JS 點擊)"""
         self.page.evaluate("""() => {
-            const btn = document.querySelector('div[role="button"] svg[aria-label="暫停"]')?.closest('div[role="button"]');
+            const btn = document
+                .querySelector('div[role="button"] svg[aria-label="暫停"]')
+                ?.closest('div[role="button"]');
             if (btn) btn.click();
         }""")
 
     def next_story(self) -> bool:
         """點擊下一則 (使用 JS 點擊)"""
         return self.page.evaluate("""() => {
-            const btn = document.querySelector('div[role="button"] svg[aria-label="下一則"], div[role="button"] svg[aria-label="Next"]')?.closest('div[role="button"]');
+            const selector = 'div[role="button"] svg[aria-label="下一則"], '
+                + 'div[role="button"] svg[aria-label="Next"]';
+            const btn = document.querySelector(selector)?.closest('div[role="button"]');
             if (btn) { btn.click(); return true; }
             return false;
         }""")
@@ -77,11 +82,9 @@ class IGStoryCrawler:
                 video_loc = self.page.locator("video")
                 error_loc = self.page.get_by_text("播放此影片時發生問題")
 
-                try:
-                    # 同時等待，任一出現即解除阻塞，避免影片浪費等待時間
+                # 同時等待，任一出現即解除阻塞，避免影片浪費等待時間
+                with contextlib.suppress(Exception):
                     img_base.or_(video_loc).or_(error_loc).first.wait_for(state="visible", timeout=3000)
-                except Exception:
-                    pass
 
                 img_locator = self.get_image_locator()
                 if not img_locator.is_visible():
@@ -108,7 +111,7 @@ class IGStoryCrawler:
                 if time_s not in downloaded_times:
                     path = folder / f"{time_s}.webp"
                     if not path.exists():
-                        img_data = requests.get(img_url).content
+                        img_data = requests.get(img_url, timeout=30).content
                         path.write_bytes(img_data)
                         logger.info(f"✅ 下載成功: {path}")
                         story_paths.append(path)
@@ -134,7 +137,8 @@ def capture_latest_stories(folder: Path, username: str, auth_file: Path) -> list
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
             viewport={"width": 1024, "height": 1366},
             is_mobile=True,
             has_touch=True,
