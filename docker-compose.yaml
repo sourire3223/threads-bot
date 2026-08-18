@@ -6,7 +6,9 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      - TZ=Asia/Taipei
+      # POSIX 時差格式，不依賴映像裡的 tzdata（用 Asia/Taipei 這種名字時，缺 tzdata 會靜默退回 UTC）。
+      # 注意符號是反的：-8 代表 UTC+8。CST 只是印在 log 上的標籤，台灣沒有日光節約時間。
+      - TZ=CST-8
       - PYTHONUNBUFFERED=1
     volumes:
       - ./.env:/project/.env:ro
