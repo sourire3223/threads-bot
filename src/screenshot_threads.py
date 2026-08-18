@@ -1,3 +1,4 @@
+import contextlib
 import time
 from datetime import datetime
 from pathlib import Path
@@ -47,11 +48,13 @@ def capture_latest_post_screenshots(
             locale="zh-TW",  # 不設的話會跟著機器語系跑，截圖的 UI 語言會不一致
         )
         page = context.new_page()
-        page.goto(url)
+        response = page.goto(url)
         page.wait_for_timeout(3000)
         screenshot_paths = []
         try:
-            page.wait_for_selector(SELECTOR, timeout=3000)
+            # 部署機比本機慢（本機量到 goto 後 2.1 秒才出現），選擇器一出現就會往下走，
+            # 所以設寬一點不會讓正常情況變慢，只是別讓慢機器整輪擷取直接失敗。
+            page.wait_for_selector(SELECTOR, timeout=30000)
             page.evaluate(REMOVE_DIALOG_JS)
             page.evaluate(REMOVE_NAV_JS)
 
@@ -92,7 +95,13 @@ def capture_latest_post_screenshots(
                 screenshot_paths.append(path)
                 logger.success(f"✅ 貼文擷取成功: {path.name}")
         except Exception:
-            logger.exception("❌ 貼文擷取失敗")
+            # 光看 traceback 分不出是「載入太慢」還是「被 Meta 擋掉／登入牆」，
+            # 所以把 HTTP 狀態、最終網址和頁面開頭一起記下來。
+            status = response.status if response else "unknown"
+            page_text = ""
+            with contextlib.suppress(Exception):
+                page_text = page.inner_text("body")[:200].replace("\n", " ")
+            logger.exception(f"❌ 貼文擷取失敗（HTTP {status}｜{page.url}｜{page_text}）")
         finally:
             browser.close()
 
