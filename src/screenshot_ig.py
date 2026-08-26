@@ -7,6 +7,8 @@ import requests
 from loguru import logger
 from playwright.sync_api import expect, sync_playwright
 
+from src.playwright_utils import remove_stale_playwright_artifacts
+
 
 def post_time_to_int(s: str) -> int:
     return int(datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%f%z").timestamp())
@@ -134,39 +136,47 @@ class IGStoryCrawler:
 def capture_latest_stories(folder: Path, username: str, auth_file: Path) -> list[Path]:
     url = f"https://www.instagram.com/stories/{username}/"
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
-            viewport={"width": 1024, "height": 1366},
-            is_mobile=True,
-            has_touch=True,
-            locale="zh-TW",
-            storage_state=str(auth_file) if auth_file.exists() else None,
-        )
-        page = context.new_page()
-        page.goto(url)
+    try:
+        remove_stale_playwright_artifacts()
+        with sync_playwright() as p:
+            browser = None
+            try:
+                browser = p.chromium.launch(headless=True)
+                context = browser.new_context(
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
+                    viewport={"width": 1024, "height": 1366},
+                    is_mobile=True,
+                    has_touch=True,
+                    locale="zh-TW",
+                    storage_state=str(auth_file) if auth_file.exists() else None,
+                )
+                page = context.new_page()
+                page.goto(url)
 
-        # 沒有限動或登入失效時，IG 會把 /stories/<user>/ 導向個人頁或登入頁。
-        # IG 是 SPA，導向發生在 goto 回傳之後，所以要等 URL 變化再判斷；
-        # 等到 timeout 代表沒被導走，也就是有限動可看。
-        with contextlib.suppress(Exception):
-            page.wait_for_url(lambda u: "/stories/" not in u, timeout=5000)
+                # 沒有限動或登入失效時，IG 會把 /stories/<user>/ 導向個人頁或登入頁。
+                # IG 是 SPA，導向發生在 goto 回傳之後，所以要等 URL 變化再判斷；
+                # 等到 timeout 代表沒被導走，也就是有限動可看。
+                with contextlib.suppress(Exception):
+                    page.wait_for_url(lambda u: "/stories/" not in u, timeout=5000)
 
-        if "/stories/" not in page.url:
-            if "/accounts/login" in page.url:
-                logger.warning(f"⚠️ auth.json 可能已失效（被導向 {page.url}），請重跑 record_login.py")
-            else:
-                logger.info(f"ℹ️ 目前沒有可看的限時動態（被導向 {page.url}）")
-            browser.close()
-            return []
+                if "/stories/" not in page.url:
+                    if "/accounts/login" in page.url:
+                        logger.warning(f"⚠️ auth.json 可能已失效（被導向 {page.url}），請重跑 record_login.py")
+                    else:
+                        logger.info(f"ℹ️ 目前沒有可看的限時動態（被導向 {page.url}）")
+                    return []
 
-        crawler = IGStoryCrawler(page)
-        story_paths = crawler.capture(folder)
-
-        browser.close()
-        return story_paths
+                return IGStoryCrawler(page).capture(folder)
+            except Exception:
+                logger.exception(f"❌ 限動擷取失敗（瀏覽器初始化或載入｜{url}）")
+                return []
+            finally:
+                if browser:
+                    browser.close()
+    except Exception:
+        logger.exception(f"❌ 無法啟動 Playwright（{url}）")
+        return []
 
 
 if __name__ == "__main__":

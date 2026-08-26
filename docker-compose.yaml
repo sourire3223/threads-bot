@@ -10,6 +10,15 @@ services:
       # 注意符號是反的：-8 代表 UTC+8。CST 只是印在 log 上的標籤，台灣沒有日光節約時間。
       - TZ=CST-8
       - PYTHONUNBUFFERED=1
+    # Chromium/Playwright 的短暫檔案不寫入 Docker 的 writable layer；容器重建時也會自動清空。
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m,mode=1777
+    # Docker 預設 json-file log 無上限，長時間執行會吃滿 Docker 磁碟。
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     volumes:
       - ./.env:/project/.env:ro
       - ./screenshots:/project/screenshots
