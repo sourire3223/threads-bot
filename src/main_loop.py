@@ -9,10 +9,10 @@ from loguru import logger
 
 from src.logging_config import setup_logging
 from src.screenshot_ig import capture_latest_stories
-from src.screenshot_threads import capture_latest_post_screenshots
+from src.screenshot_threads import capture_latest_post_screenshots, capture_latest_reply_parent_screenshots
 
 load_dotenv()
-WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
 THREAD_URLS = [
     "https://www.threads.com/@paul_pork/",
     "https://www.threads.com/@paul_pork/replies",
@@ -37,14 +37,17 @@ def send_image_to_discord(image_path: Path, webhook_url: str):
 def main_loop():
     while True:
         new_post_paths = capture_latest_post_screenshots(
-            SCREENSHOT_DIR, THREAD_URLS[0], n_lookback=6, time_lookback=10 * INTERVAL_SECONDS
+            SCREENSHOT_DIR, THREAD_URLS[0], n_lookback=24, time_lookback=144 * INTERVAL_SECONDS
         )
         new_reply_paths = capture_latest_post_screenshots(
-            SCREENSHOT_DIR, THREAD_URLS[1], n_lookback=6, time_lookback=10 * INTERVAL_SECONDS
+            SCREENSHOT_DIR, THREAD_URLS[1], n_lookback=24, time_lookback=144 * INTERVAL_SECONDS
         )
-        new_story_paths = capture_latest_stories(SCREENSHOT_DIR, IG_USER, auth_file=Path("auth.json"))
+        new_reply_parent_paths = capture_latest_reply_parent_screenshots(
+            SCREENSHOT_DIR, THREAD_URLS[1], n_lookback=24, time_lookback=144 * INTERVAL_SECONDS
+        )
+        # new_story_paths = capture_latest_stories(SCREENSHOT_DIR, IG_USER, auth_file=Path("auth.json"))
 
-        new_paths = sorted(new_reply_paths + new_post_paths + new_story_paths)
+        new_paths = sorted(new_reply_paths + new_post_paths + new_reply_parent_paths)
         if new_paths:
             logger.info(f"✨ 偵測到 {len(new_paths)} 則新內容，準備發送")
         else:

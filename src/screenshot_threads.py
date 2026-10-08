@@ -1,7 +1,9 @@
 import contextlib
+import re
 import time
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 from loguru import logger
 from playwright.sync_api import sync_playwright
@@ -27,13 +29,64 @@ REMOVE_NAV_JS = """
         el.remove();
     });
 """
+REPLYING_TO_TARGET_PATTERN = re.compile(r"(?:Replying to|正在回覆|正在回复)\s*@paul_pork", re.IGNORECASE)
+GHOST_EXPIRY_PATTERN = re.compile(r"\b\d+\s*(?:s|m|h|d)\s+left\b", re.IGNORECASE)
+POST_PATH_PART_COUNT = 3
+MAX_UNCHANGED_SCROLL_ROUNDS = 3
+
+
+def is_post_permalink(url: str, username: str | None = None) -> bool:
+    path_parts = [part for part in urlparse(url).path.split("/") if part]
+    if len(path_parts) != POST_PATH_PART_COUNT or path_parts[1] != "post":
+        return False
+    return username is None or path_parts[0] == f"@{username}"
+
+
+def capture_ghost_root(  # noqa: PLR0911
+    page, root_url: str, folder: Path, current_time: int, time_lookback: int
+) -> Path | None:
+    page.goto(root_url, wait_until="domcontentloaded")
+    page.wait_for_timeout(1800)
+    with contextlib.suppress(Exception):
+        page.evaluate(REMOVE_DIALOG_JS)
+    post = page.locator('div[data-pagelet="threads_post_page_1"]')
+    if not post.count() or not post.get_by_text(GHOST_EXPIRY_PATTERN).count():
+        logger.debug(f"⏭️ root 不是可見的 Ghost Post: {root_url}")
+        return None
+    datetimes = post.evaluate("""
+        (post) => Array.from(post.querySelectorAll('time'))
+            .map(el => el.getAttribute('datetime'))
+            .filter(Boolean)
+    """)
+    if not datetimes:
+        return None
+    try:
+        time_s = post_time_to_int(max(datetimes))
+    except ValueError:
+        return None
+    if time_s < current_time - time_lookback:
+        return None
+    path = folder / f"{time_s}.png"
+    if path.exists():
+        return None
+    for _ in range(3):
+        page.evaluate(REMOVE_ALERT_JS)
+        time.sleep(1)
+    page.evaluate(REMOVE_DIALOG_JS)
+    try:
+        post.screenshot(path=path)
+    except Exception:
+        logger.exception(f"❌ Ghost 貼文截圖失敗: {root_url}")
+        return None
+    logger.success(f"✅ Ghost 貼文擷取成功: {path.name}")
+    return path
 
 
 def post_time_to_int(s: str) -> int:
     return int(datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%f%z").timestamp())
 
 
-def capture_latest_post_screenshots(
+def capture_latest_post_screenshots(  # noqa: PLR0915
     folder: Path, url: str, n_lookback: int = 5, time_lookback: int = 2147483647
 ) -> list[Path]:
     """擷取最新的 n 張，且時間在 current_time - time_lookback 之後的截圖"""
@@ -80,9 +133,17 @@ def capture_latest_post_screenshots(
                     datetimes = post.evaluate("""
                         (post) => Array.from(post.querySelectorAll('time'))
                             .map(el => el.getAttribute('datetime'))
+                            .filter(Boolean)
                     """)
+                    if not datetimes:
+                        logger.debug(f"⏭️ 貼文沒有有效時間，跳過第 {i + 1} 則")
+                        continue
 
-                    time_s = post_time_to_int(max(datetimes))
+                    try:
+                        time_s = post_time_to_int(max(datetimes))
+                    except ValueError:
+                        logger.debug(f"⏭️ 貼文時間格式無法解析，跳過第 {i + 1} 則: {datetimes}")
+                        continue
                     if time_s < current_time - time_lookback:
                         logger.debug(f"⏭️ 貼文太舊，跳過: {time_s} < {current_time - time_lookback}")
                         continue
@@ -108,6 +169,97 @@ def capture_latest_post_screenshots(
                     page_text = page.inner_text("body")[:200].replace("\n", " ")
                 page_url = page.url if "page" in locals() else url
                 logger.exception(f"❌ 貼文擷取失敗（HTTP {status}｜{page_url}｜{page_text}）")
+            finally:
+                if browser:
+                    browser.close()
+    except Exception:
+        logger.exception(f"❌ 無法啟動 Playwright（{url}）")
+
+    return screenshot_paths
+
+
+def capture_latest_reply_parent_screenshots(  # noqa: PLR0912, PLR0915
+    folder: Path, url: str, n_lookback: int = 5, time_lookback: int = 2147483647
+) -> list[Path]:
+    """Follow marked reply permalinks and capture Ghost parent posts."""
+    screenshot_paths = []
+    try:
+        remove_stale_playwright_artifacts()
+        with sync_playwright() as p:
+            browser = None
+            try:
+                browser = p.chromium.launch(headless=True)
+                context = browser.new_context(
+                    viewport={"width": 1280, "height": 900},
+                    color_scheme="dark",
+                    locale="en-US",
+                )
+                page = context.new_page()
+                response = page.goto(url)
+                page.wait_for_timeout(3000)
+                page.evaluate(REMOVE_DIALOG_JS)
+                page.evaluate(REMOVE_NAV_JS)
+
+                reply_urls = []
+                unchanged_rounds = 0
+                for _ in range(30):
+                    reply_markers = page.get_by_text(REPLYING_TO_TARGET_PATTERN)
+                    previous_count = len(reply_urls)
+                    for index in range(reply_markers.count()):
+                        marker = reply_markers.nth(index)
+                        card = marker.locator("xpath=ancestor::div[.//time][1]")
+                        hrefs = card.locator("a[href*='/post/']").evaluate_all(
+                            "links => [...new Set(links.map(link => link.href))]"
+                        )
+                        for href in hrefs:
+                            if is_post_permalink(href) and not is_post_permalink(href, "paul_pork"):
+                                if href not in reply_urls:
+                                    reply_urls.append(href)
+                                break
+                    if len(reply_urls) >= n_lookback:
+                        break
+                    if len(reply_urls) == previous_count:
+                        unchanged_rounds += 1
+                        if unchanged_rounds >= MAX_UNCHANGED_SCROLL_ROUNDS:
+                            break
+                    else:
+                        unchanged_rounds = 0
+                    page.mouse.wheel(0, 1400)
+                    page.wait_for_timeout(1200)
+                    page.evaluate(REMOVE_DIALOG_JS)
+                    page.evaluate(REMOVE_ALERT_JS)
+
+                reply_urls = reply_urls[:n_lookback]
+                logger.info(f"🔍 檢查 {url} 的 {len(reply_urls)} 則目標回覆")
+                current_time = int(time.time())
+                visited_roots = set()
+
+                for reply_url in reply_urls:
+                    try:
+                        page.goto(reply_url, wait_until="domcontentloaded")
+                    except Exception:
+                        logger.exception(f"❌ 回覆 permalink 載入失敗: {reply_url}")
+                        continue
+                    page.wait_for_timeout(1800)
+                    page.evaluate(REMOVE_DIALOG_JS)
+                    parent_hrefs = page.locator("a[href*='/@paul_pork/post/']").evaluate_all(
+                        "links => [...new Set(links.map(link => link.href))]"
+                    )
+                    root_urls = [href for href in parent_hrefs if is_post_permalink(href, "paul_pork")]
+                    for root_url in root_urls:
+                        if root_url in visited_roots:
+                            continue
+                        visited_roots.add(root_url)
+                        path = capture_ghost_root(page, root_url, folder, current_time, time_lookback)
+                        if path:
+                            screenshot_paths.append(path)
+            except Exception:
+                status = response.status if "response" in locals() and response else "unknown"
+                page_text = ""
+                with contextlib.suppress(Exception):
+                    page_text = page.inner_text("body")[:200].replace("\n", " ")
+                page_url = page.url if "page" in locals() else url
+                logger.exception(f"❌ 回覆 parent 擷取失敗（HTTP {status}｜{page_url}｜{page_text}）")
             finally:
                 if browser:
                     browser.close()
