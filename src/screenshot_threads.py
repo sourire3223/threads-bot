@@ -42,11 +42,18 @@ def is_post_permalink(url: str, username: str | None = None) -> bool:
     return username is None or path_parts[0] == f"@{username}"
 
 
+def is_threads_checkpoint(url: str) -> bool:
+    return urlparse(url).path.startswith("/aymh/")
+
+
 def capture_ghost_root(  # noqa: PLR0911
     page, root_url: str, folder: Path, current_time: int, time_lookback: int
 ) -> Path | None:
     page.goto(root_url, wait_until="domcontentloaded")
     page.wait_for_timeout(1800)
+    if is_threads_checkpoint(page.url):
+        logger.warning(f"⚠️ Threads 要求存取驗證，略過 root 擷取: {page.url}")
+        return None
     with contextlib.suppress(Exception):
         page.evaluate(REMOVE_DIALOG_JS)
     post = page.locator('div[data-pagelet="threads_post_page_1"]')
@@ -110,6 +117,9 @@ def capture_latest_post_screenshots(  # noqa: PLR0915
                 page = context.new_page()
                 response = page.goto(url)
                 page.wait_for_timeout(3000)
+                if is_threads_checkpoint(page.url):
+                    logger.warning(f"⚠️ Threads 要求存取驗證，略過本輪擷取: {page.url}")
+                    return screenshot_paths
                 # 部署機比本機慢（本機量到 goto 後 2.1 秒才出現），選擇器一出現就會往下走，
                 # 所以設寬一點不會讓正常情況變慢，只是別讓慢機器整輪擷取直接失敗。
                 page.wait_for_selector(SELECTOR, timeout=30000)
@@ -199,6 +209,9 @@ def capture_latest_reply_parent_screenshots(  # noqa: PLR0912, PLR0915
                 page.wait_for_timeout(3000)
                 page.evaluate(REMOVE_DIALOG_JS)
                 page.evaluate(REMOVE_NAV_JS)
+                if is_threads_checkpoint(page.url):
+                    logger.warning(f"⚠️ Threads 要求存取驗證，略過本輪擷取: {page.url}")
+                    return screenshot_paths
 
                 reply_urls = []
                 unchanged_rounds = 0
