@@ -55,16 +55,39 @@ def threads_aymh_redirect_seen() -> bool:
     return _threads_aymh_state["redirect_seen"]
 
 
-def log_threads_aymh_redirect(page, response, action: str) -> None:
+def log_threads_navigation(page, response, requested_url: str, action: str) -> None:
+    redirect_chain = []
+    request = response.request if response else None
+    while request:
+        redirect_chain.append(request.url)
+        request = request.redirected_from
+    redirect_chain.reverse()
+    status = response.status if response else "unknown"
+    response_url = response.url if response else "unknown"
+    content_type = response.headers.get("content-type", "unknown") if response else "unknown"
+    logger.debug(
+        f"Threads navigation [{action}] requested={requested_url} final={page.url} "
+        f"response_url={response_url} status={status} content_type={content_type} "
+        f"redirect_chain={redirect_chain}"
+    )
+
+
+def log_threads_aymh_redirect(page, response, requested_url: str, action: str) -> None:
     _threads_aymh_state["redirect_seen"] = True
     title = ""
     body = ""
+    ready_state = "unknown"
+    with contextlib.suppress(Exception):
+        ready_state = page.evaluate("document.readyState")
     with contextlib.suppress(Exception):
         title = page.title()
     with contextlib.suppress(Exception):
-        body = page.locator("body").inner_text(timeout=1000)[:300].replace("\n", " ")
-    status = response.status if response else "unknown"
-    logger.warning(f"⚠️ Threads 導向 /aymh/ 頁面，略過{action}（HTTP {status}｜{page.url}｜{title}｜{body}）")
+        body = page.locator("body").inner_text(timeout=2000)[:1000].replace("\n", " ")
+    log_threads_navigation(page, response, requested_url, action)
+    logger.warning(
+        f"⚠️ Threads 導向 /aymh/ 頁面，略過{action} "
+        f"(requested={requested_url} final={page.url} readyState={ready_state} title={title!r} body={body!r})"
+    )
 
 
 def has_rendered_post_content(post) -> bool:
@@ -104,10 +127,11 @@ def capture_ghost_root(  # noqa: PLR0911
 ) -> Path | None:
     if threads_aymh_redirect_seen():
         return None
-    page.goto(root_url, wait_until="domcontentloaded")
+    response = page.goto(root_url, wait_until="domcontentloaded")
     page.wait_for_timeout(1800)
+    log_threads_navigation(page, response, root_url, "ghost root")
     if is_threads_aymh_redirect(page.url):
-        log_threads_aymh_redirect(page, None, "root 擷取")
+        log_threads_aymh_redirect(page, response, root_url, "root 擷取")
         return None
     with contextlib.suppress(Exception):
         page.evaluate(REMOVE_DIALOG_JS)
@@ -175,8 +199,9 @@ def capture_latest_post_screenshots(  # noqa: PLR0912, PLR0915
                 page = context.new_page()
                 response = page.goto(url)
                 page.wait_for_timeout(3000)
+                log_threads_navigation(page, response, url, "profile/replies")
                 if is_threads_aymh_redirect(page.url):
-                    log_threads_aymh_redirect(page, response, "本輪擷取")
+                    log_threads_aymh_redirect(page, response, url, "本輪擷取")
                     return screenshot_paths
                 page.wait_for_selector(SELECTOR, timeout=30000)
                 page.evaluate(REMOVE_DIALOG_JS)
@@ -275,10 +300,11 @@ def capture_latest_reply_parent_screenshots(  # noqa: PLR0912, PLR0915
                 page = context.new_page()
                 response = page.goto(url)
                 page.wait_for_timeout(3000)
+                log_threads_navigation(page, response, url, "reply index")
                 page.evaluate(REMOVE_DIALOG_JS)
                 page.evaluate(REMOVE_NAV_JS)
                 if is_threads_aymh_redirect(page.url):
-                    log_threads_aymh_redirect(page, response, "本輪擷取")
+                    log_threads_aymh_redirect(page, response, url, "本輪擷取")
                     return screenshot_paths
 
                 reply_urls = []
@@ -324,8 +350,9 @@ def capture_latest_reply_parent_screenshots(  # noqa: PLR0912, PLR0915
                         logger.exception(f"❌ 回覆 permalink 載入失敗: {reply_url}")
                         continue
                     page.wait_for_timeout(1800)
+                    log_threads_navigation(page, reply_response, reply_url, "reply permalink")
                     if is_threads_aymh_redirect(page.url):
-                        log_threads_aymh_redirect(page, reply_response, "回覆 permalink 擷取")
+                        log_threads_aymh_redirect(page, reply_response, reply_url, "回覆 permalink 擷取")
                         return screenshot_paths
                     page.evaluate(REMOVE_DIALOG_JS)
                     parent_hrefs = page.locator("a[href*='/@paul_pork/post/']").evaluate_all(
