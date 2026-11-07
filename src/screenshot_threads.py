@@ -46,6 +46,38 @@ def is_threads_checkpoint(url: str) -> bool:
     return urlparse(url).path.startswith("/aymh/")
 
 
+def has_rendered_post_content(post) -> bool:
+    return post.evaluate("""
+        (post) => {
+            const hasVisibleBodyText = Array.from(post.querySelectorAll('div[dir="auto"]'))
+                .some(node => {
+                    const text = node.innerText.trim();
+                    const metadataPattern =
+                        /^(paul_pork|translate|翻譯|[0-9]+|[0-9]+ *(?:秒|分鐘|小時|天|週|月|年|s|m|h|d))$/i;
+                    const isMetadata = metadataPattern.test(text);
+                    if (!text || isMetadata) return false;
+                    if (!node.getClientRects().length) return false;
+                    for (let ancestor = node; ancestor && ancestor !== post; ancestor = ancestor.parentElement) {
+                        const style = getComputedStyle(ancestor);
+                        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
+                            return false;
+                        }
+                    }
+                    return true;
+                });
+            const hasLoadedMedia = Array.from(post.querySelectorAll('img'))
+                .some(image => image.complete && image.naturalWidth > 150)
+                || Array.from(post.querySelectorAll('video'))
+                    .some(video => video.readyState >= 2);
+            return Boolean(
+                post.querySelector('time[datetime]')
+                && post.querySelector('a[href*="/post/"]')
+                && (hasVisibleBodyText || hasLoadedMedia)
+            );
+        }
+    """)
+
+
 def capture_ghost_root(  # noqa: PLR0911
     page, root_url: str, folder: Path, current_time: int, time_lookback: int
 ) -> Path | None:
@@ -93,7 +125,7 @@ def post_time_to_int(s: str) -> int:
     return int(datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%f%z").timestamp())
 
 
-def capture_latest_post_screenshots(  # noqa: PLR0915
+def capture_latest_post_screenshots(  # noqa: PLR0912, PLR0915
     folder: Path, url: str, n_lookback: int = 5, time_lookback: int = 2147483647
 ) -> list[Path]:
     """擷取最新的 n 張，且時間在 current_time - time_lookback 之後的截圖"""
@@ -120,8 +152,6 @@ def capture_latest_post_screenshots(  # noqa: PLR0915
                 if is_threads_checkpoint(page.url):
                     logger.warning(f"⚠️ Threads 要求存取驗證，略過本輪擷取: {page.url}")
                     return screenshot_paths
-                # 部署機比本機慢（本機量到 goto 後 2.1 秒才出現），選擇器一出現就會往下走，
-                # 所以設寬一點不會讓正常情況變慢，只是別讓慢機器整輪擷取直接失敗。
                 page.wait_for_selector(SELECTOR, timeout=30000)
                 page.evaluate(REMOVE_DIALOG_JS)
                 page.evaluate(REMOVE_NAV_JS)
@@ -137,6 +167,15 @@ def capture_latest_post_screenshots(  # noqa: PLR0915
 
                 for i in range(min(n_lookback, n_posts)):
                     post = posts.nth(i)
+                    post.scroll_into_view_if_needed()
+                    for _ in range(20):
+                        if has_rendered_post_content(post):
+                            break
+                        page.wait_for_timeout(1000)
+                    else:
+                        logger.warning(f"⚠️ 貼文內容或媒體未載入，略過第 {i + 1} 則")
+                        continue
+
                     for _ in range(3):
                         page.evaluate(REMOVE_ALERT_JS)
                         time.sleep(1)
