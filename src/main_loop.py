@@ -9,7 +9,11 @@ from loguru import logger
 
 from src.logging_config import setup_logging
 from src.screenshot_ig import capture_latest_stories
-from src.screenshot_threads import capture_latest_post_screenshots, capture_latest_reply_parent_screenshots
+from src.screenshot_threads import (
+    capture_latest_post_screenshots,
+    capture_latest_reply_parent_screenshots,
+    reset_threads_aymh_redirect_state,
+)
 
 load_dotenv()
 WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
@@ -36,6 +40,7 @@ def send_image_to_discord(image_path: Path, webhook_url: str):
 
 def main_loop():
     while True:
+        reset_threads_aymh_redirect_state()
         new_post_paths = capture_latest_post_screenshots(
             SCREENSHOT_DIR, THREAD_URLS[0], n_lookback=24, time_lookback=144 * INTERVAL_SECONDS
         )

@@ -33,6 +33,7 @@ REPLYING_TO_TARGET_PATTERN = re.compile(r"(?:Replying to|正在回覆|正在回�
 GHOST_EXPIRY_PATTERN = re.compile(r"\b\d+\s*(?:s|m|h|d)\s+left\b", re.IGNORECASE)
 POST_PATH_PART_COUNT = 3
 MAX_UNCHANGED_SCROLL_ROUNDS = 3
+_threads_aymh_state = {"redirect_seen": False}
 
 
 def is_post_permalink(url: str, username: str | None = None) -> bool:
@@ -42,8 +43,28 @@ def is_post_permalink(url: str, username: str | None = None) -> bool:
     return username is None or path_parts[0] == f"@{username}"
 
 
-def is_threads_checkpoint(url: str) -> bool:
+def is_threads_aymh_redirect(url: str) -> bool:
     return urlparse(url).path.startswith("/aymh/")
+
+
+def reset_threads_aymh_redirect_state() -> None:
+    _threads_aymh_state["redirect_seen"] = False
+
+
+def threads_aymh_redirect_seen() -> bool:
+    return _threads_aymh_state["redirect_seen"]
+
+
+def log_threads_aymh_redirect(page, response, action: str) -> None:
+    _threads_aymh_state["redirect_seen"] = True
+    title = ""
+    body = ""
+    with contextlib.suppress(Exception):
+        title = page.title()
+    with contextlib.suppress(Exception):
+        body = page.locator("body").inner_text(timeout=1000)[:300].replace("\n", " ")
+    status = response.status if response else "unknown"
+    logger.warning(f"⚠️ Threads 導向 /aymh/ 頁面，略過{action}（HTTP {status}｜{page.url}｜{title}｜{body}）")
 
 
 def has_rendered_post_content(post) -> bool:
@@ -81,10 +102,12 @@ def has_rendered_post_content(post) -> bool:
 def capture_ghost_root(  # noqa: PLR0911
     page, root_url: str, folder: Path, current_time: int, time_lookback: int
 ) -> Path | None:
+    if threads_aymh_redirect_seen():
+        return None
     page.goto(root_url, wait_until="domcontentloaded")
     page.wait_for_timeout(1800)
-    if is_threads_checkpoint(page.url):
-        logger.warning(f"⚠️ Threads 要求存取驗證，略過 root 擷取: {page.url}")
+    if is_threads_aymh_redirect(page.url):
+        log_threads_aymh_redirect(page, None, "root 擷取")
         return None
     with contextlib.suppress(Exception):
         page.evaluate(REMOVE_DIALOG_JS)
@@ -130,6 +153,9 @@ def capture_latest_post_screenshots(  # noqa: PLR0912, PLR0915
 ) -> list[Path]:
     """擷取最新的 n 張，且時間在 current_time - time_lookback 之後的截圖"""
     screenshot_paths = []
+    if threads_aymh_redirect_seen():
+        logger.warning("⏸️ 本輪已遇到 Threads /aymh/ 導頁，略過後續擷取")
+        return screenshot_paths
     try:
         remove_stale_playwright_artifacts()
         with sync_playwright() as p:
@@ -149,8 +175,8 @@ def capture_latest_post_screenshots(  # noqa: PLR0912, PLR0915
                 page = context.new_page()
                 response = page.goto(url)
                 page.wait_for_timeout(3000)
-                if is_threads_checkpoint(page.url):
-                    logger.warning(f"⚠️ Threads 要求存取驗證，略過本輪擷取: {page.url}")
+                if is_threads_aymh_redirect(page.url):
+                    log_threads_aymh_redirect(page, response, "本輪擷取")
                     return screenshot_paths
                 page.wait_for_selector(SELECTOR, timeout=30000)
                 page.evaluate(REMOVE_DIALOG_JS)
@@ -232,6 +258,9 @@ def capture_latest_reply_parent_screenshots(  # noqa: PLR0912, PLR0915
 ) -> list[Path]:
     """Follow marked reply permalinks and capture Ghost parent posts."""
     screenshot_paths = []
+    if threads_aymh_redirect_seen():
+        logger.warning("⏸️ 本輪已遇到 Threads /aymh/ 導頁，略過後續擷取")
+        return screenshot_paths
     try:
         remove_stale_playwright_artifacts()
         with sync_playwright() as p:
@@ -248,8 +277,8 @@ def capture_latest_reply_parent_screenshots(  # noqa: PLR0912, PLR0915
                 page.wait_for_timeout(3000)
                 page.evaluate(REMOVE_DIALOG_JS)
                 page.evaluate(REMOVE_NAV_JS)
-                if is_threads_checkpoint(page.url):
-                    logger.warning(f"⚠️ Threads 要求存取驗證，略過本輪擷取: {page.url}")
+                if is_threads_aymh_redirect(page.url):
+                    log_threads_aymh_redirect(page, response, "本輪擷取")
                     return screenshot_paths
 
                 reply_urls = []
@@ -287,12 +316,17 @@ def capture_latest_reply_parent_screenshots(  # noqa: PLR0912, PLR0915
                 visited_roots = set()
 
                 for reply_url in reply_urls:
+                    if threads_aymh_redirect_seen():
+                        return screenshot_paths
                     try:
-                        page.goto(reply_url, wait_until="domcontentloaded")
+                        reply_response = page.goto(reply_url, wait_until="domcontentloaded")
                     except Exception:
                         logger.exception(f"❌ 回覆 permalink 載入失敗: {reply_url}")
                         continue
                     page.wait_for_timeout(1800)
+                    if is_threads_aymh_redirect(page.url):
+                        log_threads_aymh_redirect(page, reply_response, "回覆 permalink 擷取")
+                        return screenshot_paths
                     page.evaluate(REMOVE_DIALOG_JS)
                     parent_hrefs = page.locator("a[href*='/@paul_pork/post/']").evaluate_all(
                         "links => [...new Set(links.map(link => link.href))]"
