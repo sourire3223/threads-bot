@@ -3,7 +3,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 from loguru import logger
 from playwright.sync_api import sync_playwright
@@ -45,6 +45,56 @@ def is_post_permalink(url: str, username: str | None = None) -> bool:
 
 def is_threads_aymh_redirect(url: str) -> bool:
     return urlparse(url).path.startswith("/aymh/")
+
+
+def with_threads_aymh_bypass(url: str) -> str:
+    """加上 hpir=1 與 #xs_obid=，讓 Threads 前端視為已完成跨網域登入檢查，不再觸發 /aymh/ 導頁。"""
+    parsed = urlparse(url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query.setdefault("hpir", "1")
+    fragment = parsed.fragment or "xs_obid="
+    return urlunparse(parsed._replace(query=urlencode(query), fragment=fragment))
+
+
+def extract_threads_aymh_next_url(url: str) -> str | None:
+    """從 /aymh/?next=... 取出目標路徑並補上 bypass 參數。"""
+    parsed = urlparse(url)
+    next_values = parse_qs(parsed.query).get("next")
+    if not next_values or not next_values[0]:
+        return None
+    return with_threads_aymh_bypass(urljoin(f"{parsed.scheme}://{parsed.netloc}", next_values[0]))
+
+
+def install_threads_aymh_route(page) -> None:
+    """攔截已載入頁面上由前端 JS 觸發的 /aymh/ 導頁，回傳 204 讓瀏覽器留在原畫面。"""
+
+    def handle_aymh_route(route) -> None:
+        if (
+            route.request.is_navigation_request()
+            and not page.url.startswith("about:")
+            and not is_threads_aymh_redirect(page.url)
+        ):
+            logger.debug(f"攔截 Threads /aymh/ 前端導頁 (204 No Content): {route.request.url}")
+            route.fulfill(status=204)
+            return
+        route.continue_()
+
+    page.route("**/aymh/**", handle_aymh_route)
+
+
+def navigate_threads_page(page, url: str, action: str, wait_ms: int, wait_until: str = "load"):
+    """導向 Threads 頁面並預防/恢復 /aymh/ 跳頁。"""
+    target_url = with_threads_aymh_bypass(url)
+    response = page.goto(target_url, wait_until=wait_until)
+    page.wait_for_timeout(wait_ms)
+    log_threads_navigation(page, response, url, action)
+    if is_threads_aymh_redirect(page.url):
+        recovery_url = extract_threads_aymh_next_url(page.url) or target_url
+        logger.debug(f"偵測到 /aymh/ 頁面，嘗試導回目標頁面 [{action}]: {recovery_url}")
+        response = page.goto(recovery_url, wait_until=wait_until)
+        page.wait_for_timeout(wait_ms)
+        log_threads_navigation(page, response, recovery_url, f"{action} (recovered)")
+    return response
 
 
 def reset_threads_aymh_redirect_state() -> None:
@@ -127,9 +177,7 @@ def capture_ghost_root(  # noqa: PLR0911
 ) -> Path | None:
     if threads_aymh_redirect_seen():
         return None
-    response = page.goto(root_url, wait_until="domcontentloaded")
-    page.wait_for_timeout(1800)
-    log_threads_navigation(page, response, root_url, "ghost root")
+    response = navigate_threads_page(page, root_url, "ghost root", wait_ms=1800, wait_until="domcontentloaded")
     if is_threads_aymh_redirect(page.url):
         log_threads_aymh_redirect(page, response, root_url, "root 擷取")
         return None
@@ -197,9 +245,8 @@ def capture_latest_post_screenshots(  # noqa: PLR0912, PLR0915
                     locale="zh-TW",  # 不設的話會跟著機器語系跑，截圖的 UI 語言會不一致
                 )
                 page = context.new_page()
-                response = page.goto(url)
-                page.wait_for_timeout(3000)
-                log_threads_navigation(page, response, url, "profile/replies")
+                install_threads_aymh_route(page)
+                response = navigate_threads_page(page, url, "profile/replies", wait_ms=3000)
                 if is_threads_aymh_redirect(page.url):
                     log_threads_aymh_redirect(page, response, url, "本輪擷取")
                     return screenshot_paths
@@ -298,14 +345,13 @@ def capture_latest_reply_parent_screenshots(  # noqa: PLR0912, PLR0915
                     locale="en-US",
                 )
                 page = context.new_page()
-                response = page.goto(url)
-                page.wait_for_timeout(3000)
-                log_threads_navigation(page, response, url, "reply index")
-                page.evaluate(REMOVE_DIALOG_JS)
-                page.evaluate(REMOVE_NAV_JS)
+                install_threads_aymh_route(page)
+                response = navigate_threads_page(page, url, "reply index", wait_ms=3000)
                 if is_threads_aymh_redirect(page.url):
                     log_threads_aymh_redirect(page, response, url, "本輪擷取")
                     return screenshot_paths
+                page.evaluate(REMOVE_DIALOG_JS)
+                page.evaluate(REMOVE_NAV_JS)
 
                 reply_urls = []
                 unchanged_rounds = 0
@@ -345,12 +391,12 @@ def capture_latest_reply_parent_screenshots(  # noqa: PLR0912, PLR0915
                     if threads_aymh_redirect_seen():
                         return screenshot_paths
                     try:
-                        reply_response = page.goto(reply_url, wait_until="domcontentloaded")
+                        reply_response = navigate_threads_page(
+                            page, reply_url, "reply permalink", wait_ms=1800, wait_until="domcontentloaded"
+                        )
                     except Exception:
                         logger.exception(f"❌ 回覆 permalink 載入失敗: {reply_url}")
                         continue
-                    page.wait_for_timeout(1800)
-                    log_threads_navigation(page, reply_response, reply_url, "reply permalink")
                     if is_threads_aymh_redirect(page.url):
                         log_threads_aymh_redirect(page, reply_response, reply_url, "回覆 permalink 擷取")
                         return screenshot_paths
